@@ -72,6 +72,7 @@ struct Params {
     int goldcoinUTXO;
     /** Proof of work parameters */
     uint256 powLimit;
+    uint256 powScryptLimit;
     std::string checkpointPubKey;
     bool fPowAllowMinDifficultyBlocks;
     bool fPowNoRetargeting;

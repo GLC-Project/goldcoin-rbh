@@ -85,6 +85,7 @@ public:
         consensus.goldcoinRBH = std::numeric_limits<int>::max(); // TBD
         consensus.goldcoinUTXO = 10;
         consensus.powLimit = uint256S("00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        consensus.powScryptLimit = uint256S("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nPowTargetTimespan = 14 * 24 * 60 * 60; // two weeks
         consensus.nPowTargetSpacing = 10 * 60;
         consensus.checkpointPubKey = "0473eb813b726451901735178ee044d0c210d5053c3e47860b44eb5f0636ce8e6c01a7cf97c74f41894eafe24fad82c909db1e1a2e74378bdecb0ab4acbdfc5e07";
@@ -197,6 +198,7 @@ public:
         consensus.goldcoinRBH = std::numeric_limits<int>::max(); // TBD
         consensus.goldcoinUTXO = 10;
         consensus.powLimit = uint256S("00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        consensus.powScryptLimit = uint256S("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nPowTargetTimespan = 14 * 24 * 60 * 60; // two weeks
         consensus.nPowTargetSpacing = 10 * 60;
         consensus.checkpointPubKey = "04c28a8e186d8cba4cca3e71342f22687bf32525e41be5e0ec33082ee678516b3a6f9c3ae160c0155090c6244d9e7a1f4220179c6690efdc48259c3a3835b3df67";
@@ -288,6 +290,7 @@ public:
         consensus.BIP65Height = 1351; // BIP65 activated on regtest (Used in rpc activation tests)
         consensus.BIP66Height = 1251; // BIP66 activated on regtest (Used in rpc activation tests)
         consensus.powLimit = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        consensus.powScryptLimit = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nPowTargetTimespan = 14 * 24 * 60 * 60; // two weeks
         consensus.nPowTargetSpacing = 10 * 60;
         consensus.checkpointPubKey = "04c28a8e186d8cba4cca3e71342f22687bf32525e41be5e0ec33082ee678516b3a6f9c3ae160c0155090c6244d9e7a1f4220179c6690efdc48259c3a3835b3df67";
