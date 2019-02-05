@@ -15,4 +15,7 @@ UniValue generateBlocks(std::shared_ptr<CReserveScript> coinbaseScript, int nGen
 /** Check bounds on a command line confirm target */
 unsigned int ParseConfirmTarget(const UniValue& value);
 
+/** Return average network hashes per second based on the last 'lookup' blocks */
+UniValue GetNetworkHashPS(int lookup, int height);
+
 #endif
