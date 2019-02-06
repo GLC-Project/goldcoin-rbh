@@ -291,9 +291,6 @@ unsigned int GoldenRiver(const CBlockIndex* pindexLast, const Consensus::Params&
         bnNew.SetCompact(bnLast.GetCompact());
     }
 
-    bnLast *= 8;
-    bnLast /= 10;
-
     // Set ceilings on difficulty increases per block
     //1.0/1.02 == 100/102
     bn60ago *= 100;
@@ -304,9 +301,6 @@ unsigned int GoldenRiver(const CBlockIndex* pindexLast, const Consensus::Params&
         bnNew.SetCompact(bn60ago.GetCompact());
     }
 
-    bn60ago *= 102;
-    bn60ago /= 100;
-
     //1.0/(1.02*4) ==  100 / 408
     bn240ago *= 100;
     bn240ago /= 408;
@@ -315,9 +309,6 @@ unsigned int GoldenRiver(const CBlockIndex* pindexLast, const Consensus::Params&
     {
         bnNew.SetCompact(bn240ago.GetCompact());
     }
-
-    bn240ago *= 408;
-    bn240ago /= 100;
 
     //Sets a ceiling on highest target value (lowest possible difficulty)
     if (bnNew > bnProofOfWorkLimit)
