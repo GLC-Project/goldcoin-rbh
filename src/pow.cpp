@@ -16,7 +16,13 @@ unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHead
     assert(pindexLast != nullptr);
 
     if (pindexLast->nHeight + 1 >= params.goldcoinRBH)
+    {
+        // Reset diff for 240 blocks, the max sample size of Golden River
+        if (pindexLast->nHeight + 1 <= params.goldcoinRBH + 240)
+            return UintToArith256(params.powScryptLimit).GetCompact();
+
         return GoldenRiver(pindexLast, params);
+    }
 
     unsigned int nProofOfWorkLimit = UintToArith256(params.powLimit).GetCompact();
 
