@@ -3270,6 +3270,14 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, CValidationSta
     if (block.GetBlockTime() > nAdjustedTime + MAX_FUTURE_BLOCK_TIME)
         return state.Invalid(false, REJECT_INVALID, "time-too-new", "block timestamp too far in the future");
 
+    // Limit blocks with future time stamp to 5 min ahead to reduce the impact of time warp
+    if (nHeight >= consensusParams.goldcoinRBH && block.GetBlockTime() > nAdjustedTime + 5 * 60)
+        return state.Invalid(false, REJECT_INVALID, "time-too-new", "block's timestamp too far in the future");
+
+    // Check timestamp against prev it should not be more then 5 minutes outside blockchain time to reduce the impact of time warp
+    if (nHeight >= consensusParams.goldcoinRBH && block.GetBlockTime() <= pindexPrev->GetBlockTime() - 5 * 60)
+        return state.Invalid(false, REJECT_INVALID, "wrong-time-between-blocks", "block's timestamp is too early compare to last block");
+
     // Reject outdated version blocks when 95% (75% on testnet) of the network has upgraded:
     // check for version 2, 3 and 4 upgrades
     if((block.nVersion < 2 && nHeight >= consensusParams.BIP34Height) ||
