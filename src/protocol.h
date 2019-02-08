@@ -42,6 +42,7 @@ public:
 
     std::string GetCommand() const;
     bool IsValid(const MessageStartChars& messageStart) const;
+    bool IsOversized() const;
 
     ADD_SERIALIZE_METHODS;
 
