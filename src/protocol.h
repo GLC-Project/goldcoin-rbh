@@ -243,6 +243,13 @@ extern const char *BLOCKTXN;
  * @since protocol version 61000
  */
 extern const char *CHECKPOINT;
+
+/**
+ * Indicate if the message is used to transmit the content of a block.
+ * These messages can be significantly larger than usual messages and therefore
+ * may need to be processed differently.
+ */
+bool IsBlockLike(const std::string &strCommand);
 };
 
 /* Get a vector of all valid message types (see above) */

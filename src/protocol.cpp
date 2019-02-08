@@ -42,6 +42,12 @@ const char *CMPCTBLOCK="cmpctblock";
 const char *GETBLOCKTXN="getblocktxn";
 const char *BLOCKTXN="blocktxn";
 const char *CHECKPOINT="checkpoint";
+
+bool IsBlockLike(const std::string &strCommand) {
+    return strCommand == NetMsgType::BLOCK ||
+           strCommand == NetMsgType::CMPCTBLOCK ||
+           strCommand == NetMsgType::BLOCKTXN;
+}
 } // namespace NetMsgType
 
 /** All known message types. Keep this in the same order as the list of
