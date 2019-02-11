@@ -306,6 +306,19 @@ public:
 
     static constexpr int nMedianTimeSpan = 11;
 
+    int64_t GetMinTimeNext() const
+    {
+        int64_t medTime = GetMedianTimePast()+1;
+        const CBlockIndex* cur = this;
+        for(int x = 0; x < 4; x++) {
+            cur = cur->pprev;
+            if(!cur) {
+                return medTime;
+            }
+        }
+        return std::max((unsigned int)medTime, cur->nTime + 60 * 10);
+    }
+
     int64_t GetMedianTimePast() const
     {
         int64_t pmedian[nMedianTimeSpan];

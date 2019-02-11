@@ -25,6 +25,10 @@ struct CCheckpointData {
     MapCheckpoints mapCheckpoints;
 };
 
+struct CBadpointData {
+    MapCheckpoints mapBadpoints;
+};
+
 /**
  * Holds various statistics on transactions within a chain. Used to estimate
  * verification progress during chain sync.
@@ -79,6 +83,7 @@ public:
     const std::string& Bech32HRP() const { return bech32_hrp; }
     const std::vector<SeedSpec6>& FixedSeeds() const { return vFixedSeeds; }
     const CCheckpointData& Checkpoints() const { return checkpointData; }
+    const CBadpointData& Badpoints() const { return badpointData; }
     const ChainTxData& TxData() const { return chainTxData; }
     void UpdateVersionBitsParameters(Consensus::DeploymentPos d, int64_t nStartTime, int64_t nTimeout);
 protected:
@@ -98,6 +103,7 @@ protected:
     bool fRequireStandard;
     bool fMineBlocksOnDemand;
     CCheckpointData checkpointData;
+    CBadpointData badpointData;
     ChainTxData chainTxData;
     bool m_fallback_fee_enabled;
 };

@@ -11,6 +11,7 @@
 
 class CBlockIndex;
 struct CCheckpointData;
+struct CBadpointData;
 
 /**
  * Block-chain checkpoints are compiled-in sanity checks.
@@ -21,6 +22,12 @@ namespace Checkpoints
 
 //! Returns last CBlockIndex* that is a checkpoint
 CBlockIndex* GetLastCheckpoint(const CCheckpointData& data);
+
+//! Add an in-memory checkpoint
+void AddCheckPoint(const CCheckpointData& data, int64_t height, uint256 hash);
+
+//! Add an in-memory badpoint
+void AddBadPoint(const CBadpointData& data, int64_t height, uint256 hash);
 
 } //namespace Checkpoints
 

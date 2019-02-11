@@ -29,4 +29,16 @@ namespace Checkpoints {
         return nullptr;
     }
 
+    //Memory only!
+    void AddCheckPoint(const CCheckpointData& data, int64_t height, uint256 hash)
+    {
+        MapCheckpoints& checkpoints = const_cast<MapCheckpoints&>(data.mapCheckpoints);
+        checkpoints.insert(std::pair<int64_t,uint256>(height, hash));
+    }
+
+    //Memory only!
+    void AddBadPoint(const CBadpointData& data, int64_t height, uint256 hash) 
+    {
+        const_cast<MapCheckpoints&>(data.mapBadpoints).insert(std::pair<int64_t,uint256>(height, hash));
+    }
 } // namespace Checkpoints

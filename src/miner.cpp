@@ -40,13 +40,16 @@ uint64_t nLastBlockWeight = 0;
 int64_t UpdateTime(CBlockHeader* pblock, const Consensus::Params& consensusParams, const CBlockIndex* pindexPrev)
 {
     int64_t nOldTime = pblock->nTime;
-    int64_t nNewTime = std::max(pindexPrev->GetMedianTimePast()+1, GetAdjustedTime());
+    int64_t nNewTime = pindexPrev->nHeight+1 > consensusParams.octoberFork ?
+                std::max(pindexPrev->GetMinTimeNext(), GetAdjustedTime()) :
+                std::max(pindexPrev->GetMedianTimePast()+1, GetAdjustedTime());
+
 
     if (nOldTime < nNewTime)
         pblock->nTime = nNewTime;
 
     // Updating time can change work required on testnet:
-    if (consensusParams.fPowAllowMinDifficultyBlocks)
+    if (consensusParams.fPowAllowMinDifficultyBlocks && pindexPrev->nHeight+1 < consensusParams.octoberFork)
         pblock->nBits = GetNextWorkRequired(pindexPrev, pblock, consensusParams);
 
     return nNewTime - nOldTime;
