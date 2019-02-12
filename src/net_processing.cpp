@@ -3793,8 +3793,9 @@ bool PeerLogicValidation::SendMessages(CNode* pto)
                 static CFeeRate default_feerate(DEFAULT_MIN_RELAY_TX_FEE);
                 static FeeFilterRounder filterRounder(default_feerate);
                 CAmount filterToSend = filterRounder.round(currentFilter);
-                // We always have a fee filter of at least minRelayTxFee
-                filterToSend = std::max(filterToSend, ::minRelayTxFee.GetFeePerK());
+                // If we don't allow free transactions, then we always have a fee filter of at least minRelayTxFee
+                if (gArgs.GetArg("-limitfreerelay", DEFAULT_LIMITFREERELAY) <= 0)
+                    filterToSend = std::max(filterToSend, ::minRelayTxFee.GetFeePerK());
                 if (filterToSend != pto->lastSentFeeFilter) {
                     connman->PushMessage(pto, msgMaker.Make(NetMsgType::FEEFILTER, filterToSend));
                     pto->lastSentFeeFilter = filterToSend;

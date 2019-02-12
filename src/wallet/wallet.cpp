@@ -39,6 +39,8 @@ static const size_t OUTPUT_GROUP_MAX_ENTRIES = 10;
 
 static CCriticalSection cs_wallets;
 static std::vector<std::shared_ptr<CWallet>> vpwallets GUARDED_BY(cs_wallets);
+unsigned int nTxConfirmTarget = DEFAULT_TX_CONFIRM_TARGET;
+bool fSendFreeTransactions = DEFAULT_SEND_FREE_TRANSACTIONS;
 
 bool AddWallet(const std::shared_ptr<CWallet>& wallet)
 {
@@ -2827,7 +2829,7 @@ bool CWallet::CreateTransaction(const std::vector<CRecipient>& vecSend, CTransac
                 CAmount nValueToSelect = nValue;
                 if (nSubtractFeeFromAmount == 0)
                     nValueToSelect += nFeeRet;
-
+                double dPriority = 0;
                 // vouts to the payees
                 coin_selection_params.tx_noinputs_size = 11; // Static vsize overhead + outputs vsize. 4 nVersion, 4 nLocktime, 1 input count, 1 output count, 1 witness overhead (dummy, flag, stack size)
                 for (const auto& recipient : vecSend)
@@ -2894,6 +2896,24 @@ bool CWallet::CreateTransaction(const std::vector<CRecipient>& vecSend, CTransac
                     bnb_used = false;
                 }
 
+                for (const auto& pcoin : setCoins)
+                {
+                    const CWalletTx* wtx = GetWalletTx(pcoin.outpoint.hash);
+                    if (wtx == nullptr)
+                        continue;
+
+                    CAmount nCredit = pcoin.txout.nValue;
+                    //The coin age after the next block (depth+1) is used instead of the current,
+                    //reflecting an assumption the user would accept a bit more delay for
+                    //a chance at a free transaction.
+                    //But mempool inputs might still be in the mempool, so their age stays 0
+                    int age = wtx->GetDepthInMainChain();
+                    assert(age >= 0);
+                    if (age != 0)
+                        age += 1;
+                    dPriority += (double)nCredit * age;
+                }
+
                 const CAmount nChange = nValueIn - nValueToSelect;
                 if (nChange > 0)
                 {
@@ -2938,6 +2958,25 @@ bool CWallet::CreateTransaction(const std::vector<CRecipient>& vecSend, CTransac
                 if (nBytes < 0) {
                     strFailReason = _("Signing transaction failed");
                     return false;
+                }
+
+                CTransaction txNewConst(txNew);
+                dPriority = txNewConst.ComputePriority(dPriority, nBytes);
+
+                // Allow to override the default confirmation target over the CoinControl instance
+                unsigned int currentConfirmationTarget = nTxConfirmTarget;
+                unsigned int zeroTarget = 0;
+                if (coin_control.m_confirm_target > zeroTarget)
+                    currentConfirmationTarget = *coin_control.m_confirm_target;
+
+                // Can we complete this as a free transaction?
+                if (fSendFreeTransactions && nBytes <= MAX_FREE_TRANSACTION_CREATE_SIZE)
+                {
+                    // Not enough fee: enough priority?
+                    double dPriorityNeeded = mempool.estimateSmartPriority(currentConfirmationTarget);
+                    // Require at least hard-coded AllowFree.
+                    if (dPriority >= dPriorityNeeded && AllowFree(dPriority))
+                        break;
                 }
 
                 nFeeNeeded = GetMinimumFee(*this, nBytes, coin_control, ::mempool, ::feeEstimator, &feeCalc);
@@ -3074,7 +3113,7 @@ bool CWallet::CreateTransaction(const std::vector<CRecipient>& vecSend, CTransac
     if (gArgs.GetBoolArg("-walletrejectlongchains", DEFAULT_WALLET_REJECT_LONG_CHAINS)) {
         // Lastly, ensure this tx will pass the mempool's chain limits
         LockPoints lp;
-        CTxMemPoolEntry entry(tx, 0, 0, 0, false, 0, lp);
+        CTxMemPoolEntry entry(tx, 0, 0, 0, 0, 0, false, 0, lp);
         CTxMemPool::setEntries setAncestors;
         size_t nLimitAncestors = gArgs.GetArg("-limitancestorcount", DEFAULT_ANCESTOR_LIMIT);
         size_t nLimitAncestorSize = gArgs.GetArg("-limitancestorsize", DEFAULT_ANCESTOR_SIZE_LIMIT)*1000;
@@ -4285,6 +4324,9 @@ std::shared_ptr<CWallet> CWallet::CreateWalletFromFile(const std::string& name, 
     walletInstance->m_confirm_target = gArgs.GetArg("-txconfirmtarget", DEFAULT_TX_CONFIRM_TARGET);
     walletInstance->m_spend_zero_conf_change = gArgs.GetBoolArg("-spendzeroconfchange", DEFAULT_SPEND_ZEROCONF_CHANGE);
     walletInstance->m_signal_rbf = gArgs.GetBoolArg("-walletrbf", DEFAULT_WALLET_RBF);
+
+    if (gArgs.GetBoolArg("-sendfreetransactions", false))
+        InitWarning("The argument -sendfreetransactions is no longer supported.");
 
     walletInstance->WalletLogPrintf("Wallet completed loading in %15dms\n", GetTimeMillis() - nStart);
 

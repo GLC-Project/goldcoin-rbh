@@ -1139,6 +1139,7 @@ static UniValue sendrawtransaction(const JSONRPCRequest& request)
     CTransactionRef tx(MakeTransactionRef(std::move(mtx)));
     const uint256& hashTx = tx->GetHash();
 
+    bool fLimitFree = false;
     CAmount nMaxRawTxFee = maxTxFee;
     if (!request.params[1].isNull() && request.params[1].get_bool())
         nMaxRawTxFee = 0;
@@ -1157,7 +1158,7 @@ static UniValue sendrawtransaction(const JSONRPCRequest& request)
         CValidationState state;
         bool fMissingInputs;
         if (!AcceptToMemoryPool(mempool, state, std::move(tx), &fMissingInputs,
-                                nullptr /* plTxnReplaced */, false /* bypass_limits */, nMaxRawTxFee)) {
+                                nullptr /* plTxnReplaced */, false /* bypass_limits */, nMaxRawTxFee, fLimitFree)) {
             if (state.IsInvalid()) {
                 throw JSONRPCError(RPC_TRANSACTION_REJECTED, FormatStateMessage(state));
             } else {

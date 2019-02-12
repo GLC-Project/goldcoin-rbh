@@ -179,6 +179,8 @@ private:
     static constexpr double MIN_BUCKET_FEERATE = 1000;
     static constexpr double MAX_BUCKET_FEERATE = 1e7;
 
+    static constexpr double INF_PRIORITY = 1e9 * MAX_MONEY;
+
     /** Spacing of FeeRate buckets
      * We have to lump transactions into buckets based on feerate, but we want to be able
      * to give accurate estimates over a large range of potential feerates
@@ -210,6 +212,20 @@ public:
      *  valid over longer time horizons also.
      */
     CFeeRate estimateSmartFee(int confTarget, FeeCalculation *feeCalc, bool conservative) const;
+
+    /** Return a priority estimate.
+     *  DEPRECATED
+     *  Returns -1
+     */
+    double estimatePriority(int confTarget);
+
+    /** Estimate priority needed to get be included in a block within
+     *  confTarget blocks.
+     *  DEPRECATED
+     *  Returns -1 unless mempool is currently limited then returns INF_PRIORITY
+     *  answerFoundAtTarget is set to confTarget
+     */
+    double estimateSmartPriority(int confTarget, int *answerFoundAtTarget, const CTxMemPool& pool);
 
     /** Return a specific fee estimate calculation with a given success
      * threshold and time horizon, and optionally return detailed data about

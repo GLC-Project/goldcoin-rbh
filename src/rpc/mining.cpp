@@ -240,8 +240,9 @@ static UniValue prioritisetransaction(const JSONRPCRequest& request)
             "Accepts the transaction into mined blocks at a higher (or lower) priority\n"
             "\nArguments:\n"
             "1. \"txid\"       (string, required) The transaction id.\n"
-            "2. dummy          (numeric, optional) API-Compatibility for previous API. Must be zero or null.\n"
-            "                  DEPRECATED. For forward compatibility use named arguments and omit this parameter.\n"
+            "2. priority_delta (numeric, required) The priority to add or subtract.\n"
+            "                  The transaction selection algorithm considers the tx as it would have a higher priority.\n"
+            "                  (priority of a transaction is calculated: coinage * value_in_satoshis / txsize) \n"
             "3. fee_delta      (numeric, required) The fee value (in satoshis) to add (or subtract, if negative).\n"
             "                  Note, that this value is not a fee rate. It is a value to modify absolute fee of the TX.\n"
             "                  The fee is not actually paid, only the algorithm for selecting transactions into a block\n"
@@ -262,7 +263,7 @@ static UniValue prioritisetransaction(const JSONRPCRequest& request)
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Priority is no longer supported, dummy argument to prioritisetransaction must be 0.");
     }
 
-    mempool.PrioritiseTransaction(hash, nAmount);
+    mempool.PrioritiseTransaction(hash, request.params[1].get_real(), nAmount);
     return true;
 }
 
@@ -773,8 +774,65 @@ static UniValue submitblock(const JSONRPCRequest& request)
 
 static UniValue estimatefee(const JSONRPCRequest& request)
 {
-    throw JSONRPCError(RPC_METHOD_DEPRECATED, "estimatefee was removed in v0.17.\n"
-        "Clients should use estimatesmartfee.");
+    if (request.fHelp || request.params.size() != 1)
+        throw std::runtime_error(
+            "estimatefee nblocks\n"
+            "\nEstimates the approximate fee per kilobyte needed for a transaction to begin\n"
+            "confirmation within nblocks blocks. Uses virtual transaction size of transaction\n"
+            "as defined in BIP 141 (witness data is discounted).\n"
+            "\nArguments:\n"
+            "1. nblocks     (numeric, required)\n"
+            "\nResult:\n"
+            "n              (numeric) estimated fee-per-kilobyte\n"
+            "\n"
+            "A negative value is returned if not enough transactions and blocks\n"
+            "have been observed to make an estimate.\n"
+            "-1 is always returned for nblocks == 1 as it is impossible to calculate\n"
+            "a fee that is high enough to get reliably included in the next block.\n"
+            "\nExample:\n"
+            + HelpExampleCli("estimatefee", "6")
+            );
+
+    RPCTypeCheck(request.params, {UniValue::VNUM});
+    RPCTypeCheckArgument(request.params[0], UniValue::VNUM);
+
+    int nBlocks = request.params[0].get_int();
+    if (nBlocks < 1)
+        nBlocks = 1;
+
+    CFeeRate feeRate = ::feeEstimator.estimateFee(nBlocks);
+    if (feeRate == CFeeRate(0))
+        return -1.0;
+
+    return ValueFromAmount(feeRate.GetFeePerK());
+}
+
+UniValue estimatepriority(const JSONRPCRequest& request)
+{
+    if (request.fHelp || request.params.size() != 1)
+        throw std::runtime_error(
+            "estimatepriority nblocks\n"
+            "\n Estimates the approximate priority a zero-fee transaction needs to begin\n"
+            "confirmation within nblocks blocks.\n"
+            "\nArguments:\n"
+            "1. nblocks     (numeric, required)\n"
+            "\nResult:\n"
+            "n              (numeric) estimated priority\n"
+            "\n"
+            "A negative value is returned if not enough transactions and blocks\n"
+            "have been observed to make an estimate.\n"
+            "\nExample:\n"
+            + HelpExampleCli("estimatepriority", "6")
+            );
+
+    RPCTypeCheck(request.params, {UniValue::VNUM});
+    RPCTypeCheckArgument(request.params[0], UniValue::VNUM);
+
+    int nBlocks = request.params[0].get_int();
+    if (nBlocks < 1)
+        nBlocks = 1;
+
+    return mempool.estimatePriority(nBlocks);
 }
 
 static UniValue estimatesmartfee(const JSONRPCRequest& request)
@@ -835,6 +893,42 @@ static UniValue estimatesmartfee(const JSONRPCRequest& request)
         result.pushKV("errors", errors);
     }
     result.pushKV("blocks", feeCalc.returnedTarget);
+    return result;
+}
+
+UniValue estimatesmartpriority(const JSONRPCRequest& request)
+{
+    if (request.fHelp || request.params.size() != 1)
+        throw std::runtime_error(
+            "estimatesmartpriority nblocks\n"
+            "\nEstimates the approximate priority a zero-fee transaction needs to begin\n"
+            "confirmation within nblocks blocks if possible and return the number of blocks\n"
+            "for which the estimate is valid.\n"
+            "\nArguments:\n"
+            "1. nblocks     (numeric, required)\n"
+            "\nResult:\n"
+            "{\n"
+            "  \"priority\" : x.x,    (numeric) estimated priority\n"
+            "  \"blocks\" : n         (numeric) block number where estimate was found\n"
+            "}\n"
+            "\n"
+            "A negative value is returned if not enough transactions and blocks\n"
+            "have been observed to make an estimate for any number of blocks.\n"
+            "However if the mempool reject fee is set it will return 1e9 * MAX_MONEY.\n"
+            "\nExample:\n"
+            + HelpExampleCli("estimatesmartpriority", "6")
+            );
+
+    RPCTypeCheck(request.params, {UniValue::VNUM});
+    RPCTypeCheckArgument(request.params[0], UniValue::VNUM);
+
+    int nBlocks = request.params[0].get_int();
+
+    UniValue result(UniValue::VOBJ);
+    int answerFound;
+    double priority = mempool.estimateSmartPriority(nBlocks, &answerFound);
+    result.pushKV("priority", priority);
+    result.pushKV("blocks", answerFound);
     return result;
 }
 
@@ -945,15 +1039,17 @@ static const CRPCCommand commands[] =
   //  --------------------- ------------------------  -----------------------  ----------
     { "mining",             "getnetworkhashps",       &getnetworkhashps,       {"nblocks","height"} },
     { "mining",             "getmininginfo",          &getmininginfo,          {} },
-    { "mining",             "prioritisetransaction",  &prioritisetransaction,  {"txid","dummy","fee_delta"} },
+    { "mining",             "prioritisetransaction",  &prioritisetransaction,  {"txid","priority_delta","fee_delta"} },
     { "mining",             "getblocktemplate",       &getblocktemplate,       {"template_request"} },
     { "mining",             "submitblock",            &submitblock,            {"hexdata","dummy"} },
 
 
     { "generating",         "generatetoaddress",      &generatetoaddress,      {"nblocks","address","maxtries"} },
 
-    { "hidden",             "estimatefee",            &estimatefee,            {} },
+    { "util",               "estimatepriority",       &estimatepriority,       {"nblocks"} },
+    { "util",               "estimatefee",            &estimatefee,            {"nblocks"} },
     { "util",               "estimatesmartfee",       &estimatesmartfee,       {"conf_target", "estimate_mode"} },
+    { "util",               "estimatesmartpriority",  &estimatesmartpriority,  {"nblocks"} },
 
     { "hidden",             "estimaterawfee",         &estimaterawfee,         {"conf_target", "threshold"} },
 };

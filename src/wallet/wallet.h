@@ -46,6 +46,9 @@ bool HasWallets();
 std::vector<std::shared_ptr<CWallet>> GetWallets();
 std::shared_ptr<CWallet> GetWallet(const std::string& name);
 
+extern unsigned int nTxConfirmTarget;
+extern bool fSendFreeTransactions;
+
 //! Default for -keypool
 static const unsigned int DEFAULT_KEYPOOL_SIZE = 1000;
 //! -paytxfee default
@@ -60,10 +63,14 @@ static const CAmount DEFAULT_TRANSACTION_MINFEE = 1000;
 static const CAmount WALLET_INCREMENTAL_RELAY_FEE = 5000;
 //! Default for -spendzeroconfchange
 static const bool DEFAULT_SPEND_ZEROCONF_CHANGE = true;
+//! Largest (in bytes) free transaction we're willing to create
+static const unsigned int MAX_FREE_TRANSACTION_CREATE_SIZE = 1000;
 //! Default for -walletrejectlongchains
 static const bool DEFAULT_WALLET_REJECT_LONG_CHAINS = false;
 //! Default for -avoidpartialspends
 static const bool DEFAULT_AVOIDPARTIALSPENDS = false;
+//! Default for -sendfreetransactions
+static const bool DEFAULT_SEND_FREE_TRANSACTIONS = false;
 //! -txconfirmtarget default
 static const unsigned int DEFAULT_TX_CONFIRM_TARGET = 6;
 //! -walletrbf default

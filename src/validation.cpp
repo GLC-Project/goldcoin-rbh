@@ -560,7 +560,7 @@ static bool CheckInputsFromMempoolAndCache(const CTransaction& tx, CValidationSt
 
 static bool AcceptToMemoryPoolWorker(const CChainParams& chainparams, CTxMemPool& pool, CValidationState& state, const CTransactionRef& ptx,
                               bool* pfMissingInputs, int64_t nAcceptTime, std::list<CTransactionRef>* plTxnReplaced,
-                              bool bypass_limits, const CAmount& nAbsurdFee, std::vector<COutPoint>& coins_to_uncache, bool test_accept)
+                              bool bypass_limits, const CAmount& nAbsurdFee, std::vector<COutPoint>& coins_to_uncache, bool test_accept, bool fLimitFree)
 {
     const CTransaction& tx = *ptx;
     const uint256 hash = tx.GetHash();
@@ -702,7 +702,11 @@ static bool AcceptToMemoryPoolWorker(const CChainParams& chainparams, CTxMemPool
 
         // nModifiedFees includes any fee deltas from PrioritiseTransaction
         CAmount nModifiedFees = nFees;
-        pool.ApplyDelta(hash, nModifiedFees);
+        double nPriorityDummy = 0;
+        pool.ApplyDeltas(hash, nPriorityDummy, nModifiedFees);
+
+        CAmount inChainInputValue;
+        double dPriority = view.GetPriority(tx, chainActive.Height(), inChainInputValue);
 
         // Keep track of transactions that spend a coinbase, which we re-scan
         // during reorgs to ensure COINBASE_MATURITY is still met.
@@ -715,8 +719,8 @@ static bool AcceptToMemoryPoolWorker(const CChainParams& chainparams, CTxMemPool
             }
         }
 
-        CTxMemPoolEntry entry(ptx, nFees, nAcceptTime, chainActive.Height(),
-                              fSpendsCoinbase, nSigOpsCost, lp);
+        CTxMemPoolEntry entry(ptx, nFees, nAcceptTime, dPriority, chainActive.Height(),
+                              inChainInputValue, fSpendsCoinbase, nSigOpsCost, lp);
         unsigned int nSize = entry.GetTxSize();
 
         // Check that the transaction doesn't have an excessive number of
@@ -734,8 +738,30 @@ static bool AcceptToMemoryPoolWorker(const CChainParams& chainparams, CTxMemPool
         }
 
         // No transactions are allowed below minRelayTxFee except from disconnected blocks
-        if (!bypass_limits && nModifiedFees < ::minRelayTxFee.GetFee(nSize)) {
+        else if (!bypass_limits && gArgs.GetBoolArg("-relaypriority", DEFAULT_RELAYPRIORITY) && nModifiedFees < ::minRelayTxFee.GetFee(nSize) && !AllowFree(entry.GetPriority(chainActive.Height() + 1))) {
             return state.DoS(0, false, REJECT_INSUFFICIENTFEE, "min relay fee not met", false, strprintf("%d < %d", nModifiedFees, ::minRelayTxFee.GetFee(nSize)));
+        }
+
+        // Continuously rate-limit free (really, very-low-fee) transactions
+        // This mitigates 'penny-flooding' -- sending thousands of free transactions just to
+        // be annoying or make others' transactions take longer to confirm.
+        if (fLimitFree && nModifiedFees < ::minRelayTxFee.GetFee(nSize))
+        {
+            static CCriticalSection csFreeLimiter;
+            static double dFreeCount;
+            static int64_t nLastTime;
+            int64_t nNow = GetTime();
+
+            LOCK(csFreeLimiter);
+
+            // Use an exponentially decaying ~10-minute window:
+            dFreeCount *= pow(1.0 - 1.0/600.0, (double)(nNow - nLastTime));
+            nLastTime = nNow;
+            // -limitfreerelay unit is thousand-bytes-per-minute
+            // At default rate it would take over a month to fill 1GB
+            if (dFreeCount + nSize >= gArgs.GetArg("-limitfreerelay", DEFAULT_LIMITFREERELAY) * 10 * 1000)
+                return state.DoS(0, false, REJECT_INSUFFICIENTFEE, "rate limited free transaction");
+            dFreeCount += nSize;
         }
 
         if (nAbsurdFee && nFees > nAbsurdFee)
@@ -978,10 +1004,10 @@ static bool AcceptToMemoryPoolWorker(const CChainParams& chainparams, CTxMemPool
 /** (try to) add transaction to memory pool with a specified acceptance time **/
 static bool AcceptToMemoryPoolWithTime(const CChainParams& chainparams, CTxMemPool& pool, CValidationState &state, const CTransactionRef &tx,
                         bool* pfMissingInputs, int64_t nAcceptTime, std::list<CTransactionRef>* plTxnReplaced,
-                        bool bypass_limits, const CAmount nAbsurdFee, bool test_accept)
+                        bool bypass_limits, const CAmount nAbsurdFee, bool test_accept, bool fLimitFree)
 {
     std::vector<COutPoint> coins_to_uncache;
-    bool res = AcceptToMemoryPoolWorker(chainparams, pool, state, tx, pfMissingInputs, nAcceptTime, plTxnReplaced, bypass_limits, nAbsurdFee, coins_to_uncache, test_accept);
+    bool res = AcceptToMemoryPoolWorker(chainparams, pool, state, tx, pfMissingInputs, nAcceptTime, plTxnReplaced, bypass_limits, nAbsurdFee, coins_to_uncache, test_accept, fLimitFree);
     if (!res) {
         for (const COutPoint& hashTx : coins_to_uncache)
             pcoinsTip->Uncache(hashTx);
@@ -994,10 +1020,10 @@ static bool AcceptToMemoryPoolWithTime(const CChainParams& chainparams, CTxMemPo
 
 bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState &state, const CTransactionRef &tx,
                         bool* pfMissingInputs, std::list<CTransactionRef>* plTxnReplaced,
-                        bool bypass_limits, const CAmount nAbsurdFee, bool test_accept)
+                        bool bypass_limits, const CAmount nAbsurdFee, bool test_accept, bool fLimitFree)
 {
     const CChainParams& chainparams = Params();
-    return AcceptToMemoryPoolWithTime(chainparams, pool, state, tx, pfMissingInputs, GetTime(), plTxnReplaced, bypass_limits, nAbsurdFee, test_accept);
+    return AcceptToMemoryPoolWithTime(chainparams, pool, state, tx, pfMissingInputs, GetTime(), plTxnReplaced, bypass_limits, nAbsurdFee, test_accept, fLimitFree);
 }
 
 /**
@@ -4779,6 +4805,7 @@ bool LoadMempool(void)
         }
         uint64_t num;
         file >> num;
+        double prioritydummy = 0;
         while (num--) {
             CTransactionRef tx;
             int64_t nTime;
@@ -4789,14 +4816,14 @@ bool LoadMempool(void)
 
             CAmount amountdelta = nFeeDelta;
             if (amountdelta) {
-                mempool.PrioritiseTransaction(tx->GetHash(), amountdelta);
+                mempool.PrioritiseTransaction(tx->GetHash(), prioritydummy, amountdelta);
             }
             CValidationState state;
             if (nTime + nExpiryTimeout > nNow) {
                 LOCK(cs_main);
                 AcceptToMemoryPoolWithTime(chainparams, mempool, state, tx, nullptr /* pfMissingInputs */, nTime,
                                            nullptr /* plTxnReplaced */, false /* bypass_limits */, 0 /* nAbsurdFee */,
-                                           false /* test_accept */);
+                                           false /* test_accept */, true /* fLimitFree */);
                 if (state.IsValid()) {
                     ++count;
                 } else {
@@ -4820,7 +4847,7 @@ bool LoadMempool(void)
         file >> mapDeltas;
 
         for (const auto& i : mapDeltas) {
-            mempool.PrioritiseTransaction(i.first, i.second);
+            mempool.PrioritiseTransaction(i.first, prioritydummy, i.second);
         }
     } catch (const std::exception& e) {
         LogPrintf("Failed to deserialize mempool data on disk: %s. Continuing anyway.\n", e.what());
@@ -4841,7 +4868,7 @@ bool DumpMempool(void)
     {
         LOCK(mempool.cs);
         for (const auto &i : mempool.mapDeltas) {
-            mapDeltas[i.first] = i.second;
+            mapDeltas[i.first] = i.second.second;
         }
         vinfo = mempool.infoAll();
     }
