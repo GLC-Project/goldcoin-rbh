@@ -60,7 +60,7 @@ BlockAssembler::Options::Options() {
     nBlockMaxWeight = DEFAULT_BLOCK_MAX_WEIGHT;
 }
 
-BlockAssembler::BlockAssembler(const CChainParams& params, const Options& options) : chainparams(params), goldcoinUTXOData(nullptr), goldcoinUTXOs(nullptr)
+BlockAssembler::BlockAssembler(const CChainParams& params, const Options& options) : goldcoinUTXOData(nullptr), goldcoinUTXOs(nullptr), chainparams(params)
 {
     blockMinFeeRate = options.blockMinFeeRate;
     // Limit weight to between 4K and MAX_BLOCK_WEIGHT-4K for sanity:
