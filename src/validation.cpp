@@ -1117,10 +1117,11 @@ bool ReadBlockFromDisk(CBlock& block, const CDiskBlockPos& pos, const Consensus:
         return error("%s: Deserialize or I/O error - %s at %s", __func__, e.what(), pos.ToString());
     }
 
-    CBlockIndex blockIndex(block);
-    
+    CBlockIndex* pindex = LookupBlockIndex(block.hashPrevBlock);
+    int nHeight = pindex ? pindex->nHeight + 1 : 0;
+
     // Check the header, SHA256 before fork, Scrypt after using GetPoWHash()
-    if (blockIndex.nHeight < consensusParams.goldcoinRBH) {
+    if (nHeight < consensusParams.goldcoinRBH) {
         if (!CheckProofOfWork(block.GetHash(), block.nBits, consensusParams, consensusParams.powLimit))
             return error("ReadBlockFromDisk: Errors in block header at %s", pos.ToString());
     } else {
