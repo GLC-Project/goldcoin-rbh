@@ -122,6 +122,13 @@ public:
         pchMessageStart[1] = 0xd1;
         pchMessageStart[2] = 0x99;
         pchMessageStart[3] = 0xde;
+
+        // Used for ReadRawBlockFromDisk if bootstrapping directly from Bitcoin
+        pchMessageStartBTC[0] = 0xf9;
+        pchMessageStartBTC[1] = 0xbe;
+        pchMessageStartBTC[2] = 0xb4;
+        pchMessageStartBTC[3] = 0xd9;
+
         nDefaultPort = 9447;
         nPruneAfterHeight = 100000;
 
@@ -230,6 +237,12 @@ public:
         pchMessageStart[1] = 0xe2;
         pchMessageStart[2] = 0xaa;
         pchMessageStart[3] = 0xef;
+
+        pchMessageStartBTC[0] = 0x0b;
+        pchMessageStartBTC[1] = 0x11;
+        pchMessageStartBTC[2] = 0x09;
+        pchMessageStartBTC[3] = 0x07;
+
         nDefaultPort = 19447;
         nPruneAfterHeight = 1000;
 
