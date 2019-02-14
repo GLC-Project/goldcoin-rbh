@@ -1121,10 +1121,10 @@ bool ReadBlockFromDisk(CBlock& block, const CDiskBlockPos& pos, const Consensus:
     
     // Check the header, SHA256 before fork, Scrypt after using GetPoWHash()
     if (blockIndex.nHeight < consensusParams.goldcoinRBH) {
-        if (!CheckProofOfWork(block.GetHash(), block.nBits, consensusParams))
+        if (!CheckProofOfWork(block.GetHash(), block.nBits, consensusParams, consensusParams.powLimit))
             return error("ReadBlockFromDisk: Errors in block header at %s", pos.ToString());
     } else {
-        if (!CheckProofOfWork(block.GetPoWHash(), block.nBits, consensusParams))
+        if (!CheckProofOfWork(block.GetPoWHash(), block.nBits, consensusParams, consensusParams.powScryptLimit))
             return error("ReadBlockFromDisk: Errors in block header at %s", pos.ToString());
     }
 
@@ -3131,18 +3131,18 @@ static bool FindUndoPos(CValidationState &state, int nFile, CDiskBlockPos &pos, 
 
 static bool CheckBlockHeader(const CBlockHeader& block, CValidationState& state, const Consensus::Params& consensusParams, bool fCheckPOW = true)
 {
-    CBlockIndex blockIndex(block);
-    
+    CBlockIndex* pindex = LookupBlockIndex(block.hashPrevBlock);
+    int nHeight = pindex ? pindex->nHeight + 1 : 0;
+
     // Check proof of work matches claimed amount, SHA256 before fork, Scrypt after using GetPoWHash()
-    if (blockIndex.nHeight < consensusParams.goldcoinRBH) {
-        if (fCheckPOW && !CheckProofOfWork(block.GetHash(), block.nBits, consensusParams))
+    if (nHeight < consensusParams.goldcoinRBH) {
+        if (fCheckPOW && !CheckProofOfWork(block.GetHash(), block.nBits, consensusParams, consensusParams.powLimit))
             return state.DoS(50, false, REJECT_INVALID, "high-hash", false, "proof of work failed");
     } else {
-        if (fCheckPOW && !CheckProofOfWork(block.GetPoWHash(), block.nBits, consensusParams))
+        if (fCheckPOW && !CheckProofOfWork(block.GetPoWHash(), block.nBits, consensusParams, consensusParams.powScryptLimit))
             return state.DoS(50, false, REJECT_INVALID, "high-hash", false, "proof of work failed");
     }
     // Check proof of work matches claimed amount
-    
 
     return true;
 }

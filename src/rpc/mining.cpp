@@ -128,12 +128,12 @@ UniValue generateBlocks(std::shared_ptr<CReserveScript> coinbaseScript, int nGen
         }
         // SHA256 before fork, Scrypt after using GetPoWHash(), height being mined is nHeight + 1
         if (nHeight + 1 < Params().GetConsensus().goldcoinRBH) {
-            while (nMaxTries > 0 && pblock->nNonce < nInnerLoopCount && !CheckProofOfWork(pblock->GetHash(), pblock->nBits, Params().GetConsensus())) {
+            while (nMaxTries > 0 && pblock->nNonce < nInnerLoopCount && !CheckProofOfWork(pblock->GetHash(), pblock->nBits, Params().GetConsensus(), Params().GetConsensus().powLimit)) {
                 ++pblock->nNonce;
                 --nMaxTries;
             }
         } else {
-            while (nMaxTries > 0 && pblock->nNonce < nInnerLoopCount && !CheckProofOfWork(pblock->GetPoWHash(), pblock->nBits, Params().GetConsensus())) {
+            while (nMaxTries > 0 && pblock->nNonce < nInnerLoopCount && !CheckProofOfWork(pblock->GetPoWHash(), pblock->nBits, Params().GetConsensus(), Params().GetConsensus().powScryptLimit)) {
                 ++pblock->nNonce;
                 --nMaxTries;
             }
