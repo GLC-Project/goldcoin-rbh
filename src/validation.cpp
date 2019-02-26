@@ -1386,7 +1386,10 @@ void UpdateCoins(const CTransaction& tx, CCoinsViewCache& inputs, int nHeight)
 bool CScriptCheck::operator()() {
     const CScript &scriptSig = ptxTo->vin[nIn].scriptSig;
     const CScriptWitness *witness = &ptxTo->vin[nIn].scriptWitness;
-    return VerifyScript(scriptSig, m_tx_out.scriptPubKey, witness, nFlags, CachingTransactionSignatureChecker(ptxTo, nIn, m_tx_out.nValue, cacheStore, *txdata), &error);
+    bool ret = VerifyScript(scriptSig, m_tx_out.scriptPubKey, witness, nFlags, CachingTransactionSignatureChecker(ptxTo, nIn, m_tx_out.nValue, cacheStore, *txdata), &error);
+    if (!ret)
+        LogPrintf("VerifyScript ret: false nIn: %d error: %d nFlags: %d ptxTo: %s\n", nIn, error, nFlags, ptxTo->GetHash().ToString());
+    return ret;
 }
 
 int GetSpendHeight(const CCoinsViewCache& inputs)
