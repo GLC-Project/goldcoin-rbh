@@ -68,6 +68,8 @@ struct Params {
     BIP9Deployment vDeployments[MAX_VERSION_BITS_DEPLOYMENTS];
     /** Hard fork height */
     int goldcoinRBH;
+    /** Hard fork time */
+    int64_t goldcoinRBHTime;
     /** Goldcoin height when UTXO set was taken */
     int goldcoinUTXOHeight;
     /** Proof of work parameters */

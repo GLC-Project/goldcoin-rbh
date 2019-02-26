@@ -1117,11 +1117,8 @@ bool ReadBlockFromDisk(CBlock& block, const CDiskBlockPos& pos, const Consensus:
         return error("%s: Deserialize or I/O error - %s at %s", __func__, e.what(), pos.ToString());
     }
 
-    CBlockIndex* pindex = LookupBlockIndex(block.hashPrevBlock);
-    int nHeight = pindex ? pindex->nHeight + 1 : 0;
-
     // Check the header, SHA256 before fork, Scrypt after using GetPoWHash()
-    if (nHeight < consensusParams.goldcoinRBH) {
+    if (block.GetBlockTime() < consensusParams.goldcoinRBHTime) {
         if (!CheckProofOfWork(block.GetHash(), block.nBits, consensusParams, consensusParams.powLimit))
             return error("ReadBlockFromDisk: Errors in block header at %s", pos.ToString());
     } else {
@@ -3139,11 +3136,8 @@ static bool FindUndoPos(CValidationState &state, int nFile, CDiskBlockPos &pos, 
 
 static bool CheckBlockHeader(const CBlockHeader& block, CValidationState& state, const Consensus::Params& consensusParams, bool fCheckPOW = true)
 {
-    CBlockIndex* pindex = LookupBlockIndex(block.hashPrevBlock);
-    int nHeight = pindex ? pindex->nHeight + 1 : 0;
-
     // Check proof of work matches claimed amount, SHA256 before fork, Scrypt after using GetPoWHash()
-    if (nHeight < consensusParams.goldcoinRBH) {
+    if (block.GetBlockTime() < consensusParams.goldcoinRBHTime) {
         if (fCheckPOW && !CheckProofOfWork(block.GetHash(), block.nBits, consensusParams, consensusParams.powLimit))
             return state.DoS(50, false, REJECT_INVALID, "high-hash", false, "proof of work failed");
     } else {
@@ -3324,11 +3318,11 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, CValidationSta
         return state.Invalid(false, REJECT_INVALID, "time-too-new", "block timestamp too far in the future");
 
     // Limit blocks with future time stamp to 5 min ahead to reduce the impact of time warp
-    if (nHeight >= consensusParams.goldcoinRBH && block.GetBlockTime() > nAdjustedTime + 5 * 60)
+    if (block.GetBlockTime() >= consensusParams.goldcoinRBHTime && block.GetBlockTime() > nAdjustedTime + 5 * 60)
         return state.Invalid(false, REJECT_INVALID, "time-too-new", "block's timestamp too far in the future");
 
     // Check timestamp against prev it should not be more then 5 minutes outside blockchain time to reduce the impact of time warp
-    if (nHeight >= consensusParams.goldcoinRBH && block.GetBlockTime() <= pindexPrev->GetBlockTime() - 5 * 60)
+    if (block.GetBlockTime() >= consensusParams.goldcoinRBHTime && block.GetBlockTime() <= pindexPrev->GetBlockTime() - 5 * 60)
         return state.Invalid(false, REJECT_INVALID, "wrong-time-between-blocks", "block's timestamp is too early compare to last block");
 
     // Reject outdated version blocks when 95% (75% on testnet) of the network has upgraded:
