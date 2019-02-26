@@ -194,13 +194,19 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
                 }
             }
         }
-        else if (nHeight == Params().GetConsensus().goldcoinRBH + 1 && goldcoinUTXOData != nullptr)
+        else if (nHeight == Params().GetConsensus().goldcoinRBH + 1)
         {
             // One past the RBH fork delete the testnet UTXOs and UTXO data set
-            delete goldcoinUTXOData;
-            goldcoinUTXOData = nullptr;
-            delete goldcoinUTXOs;
-            goldcoinUTXOs = nullptr;
+            if (goldcoinUTXOData)
+            {
+                delete goldcoinUTXOData;
+                goldcoinUTXOData = nullptr;
+            }
+            if (goldcoinUTXOs)
+            {
+                delete goldcoinUTXOs;
+                goldcoinUTXOs = nullptr;
+            }
         }
     }
 
