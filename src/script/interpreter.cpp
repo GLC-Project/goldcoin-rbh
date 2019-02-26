@@ -194,20 +194,20 @@ static uint32_t GetHashType(const valtype &vchSig) {
     return vchSig[vchSig.size() - 1];
 }
 
-static void CleanupScriptCode(CScript &scriptCode, const std::vector<uint8_t> &vchSig, uint32_t flags) {
-    // Drop the signature in scripts when SIGHASH_FORKID is not used.
+static bool UsesForkId(uint32_t nHashType) {
+    return nHashType & SIGHASH_FORKID;
+}
+
+static bool UsesForkId(const valtype& vchSig) {
     uint32_t nHashType = GetHashType(vchSig);
-    if (!(flags & SCRIPT_ENABLE_SIGHASH_FORKID) ||
-        !(nHashType & SIGHASH_FORKID)) {
-        FindAndDelete(scriptCode, CScript(vchSig));
-    }
+    return UsesForkId(nHashType);
 }
 
 bool static IsDefinedHashtypeSignature(const valtype &vchSig) {
     if (vchSig.size() == 0) {
         return false;
     }
-    unsigned char nHashType = GetHashType(vchSig) & ~(SIGHASH_ANYONECANPAY | SIGHASH_FORKID);
+    unsigned char nHashType = vchSig[vchSig.size() - 1] & ~(SIGHASH_ANYONECANPAY | SIGHASH_FORKID);
     if (nHashType < SIGHASH_ALL || nHashType > SIGHASH_SINGLE)
         return false;
 
@@ -229,7 +229,7 @@ bool CheckSignatureEncoding(const std::vector<unsigned char> &vchSig, unsigned i
         if (!IsDefinedHashtypeSignature(vchSig)) {
             return set_error(serror, SCRIPT_ERR_SIG_HASHTYPE);
         }
-        bool usesForkId = GetHashType(vchSig) & SIGHASH_FORKID;
+        bool usesForkId = UsesForkId(vchSig);
         bool forkIdEnabled = flags & SCRIPT_ENABLE_SIGHASH_FORKID;
         if (!forkIdEnabled && usesForkId) {
             return set_error(serror, SCRIPT_ERR_ILLEGAL_FORKID);
@@ -963,8 +963,6 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
                         return false;
                     }
 
-                    CleanupScriptCode(scriptCode, vchSig, flags);
-
                     bool fSuccess = checker.CheckSig(vchSig, vchPubKey, scriptCode, sigversion, flags);
 
                     if (!fSuccess && (flags & SCRIPT_VERIFY_NULLFAIL) && vchSig.size())
@@ -1026,7 +1024,6 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
                             if (found > 0 && (flags & SCRIPT_VERIFY_CONST_SCRIPTCODE))
                                 return set_error(serror, SCRIPT_ERR_SIG_FINDANDDELETE);
                         }
-                        CleanupScriptCode(scriptCode, vchSig, flags);
                     }
 
                     bool fSuccess = true;
@@ -1262,11 +1259,11 @@ template PrecomputedTransactionData::PrecomputedTransactionData(const CTransacti
 template PrecomputedTransactionData::PrecomputedTransactionData(const CMutableTransaction& txTo);
 
 template <class T>
-uint256 SignatureHash(const CScript& scriptCode, const T& txTo, unsigned int nIn, int nHashType, const CAmount& amount, SigVersion sigversion, const PrecomputedTransactionData* cache, uint32_t flags)
+uint256 SignatureHash(const CScript& scriptCode, const T& txTo, unsigned int nIn, int nHashType, const CAmount& amount, SigVersion sigversion, const PrecomputedTransactionData* cache)
 {
     assert(nIn < txTo.vin.size());
 
-    if (sigversion == SigVersion::WITNESS_V0 || ((nHashType & SIGHASH_FORKID) && (flags & SCRIPT_ENABLE_SIGHASH_FORKID))) {
+    if (sigversion == SigVersion::WITNESS_V0 || UsesForkId(nHashType)) {
         uint256 hashPrevouts;
         uint256 hashSequence;
         uint256 hashOutputs;
@@ -1351,7 +1348,7 @@ bool GenericTransactionSignatureChecker<T>::CheckSig(const std::vector<unsigned 
     uint32_t nHashType = GetHashType(vchSig);
     vchSig.pop_back();
 
-    uint256 sighash = SignatureHash(scriptCode, *txTo, nIn, nHashType, amount, sigversion, this->txdata, flags);
+    uint256 sighash = SignatureHash(scriptCode, *txTo, nIn, nHashType, amount, sigversion, this->txdata);
 
     if (!VerifySignature(vchSig, pubkey, sighash))
         return false;
@@ -1509,11 +1506,6 @@ bool VerifyScript(const CScript& scriptSig, const CScript& scriptPubKey, const C
     bool hadWitness = false;
 
     set_error(serror, SCRIPT_ERR_UNKNOWN_ERROR);
-
-    // If FORKID is enabled, we also ensure strict encoding.
-    if (flags & SCRIPT_ENABLE_SIGHASH_FORKID) {
-        flags |= SCRIPT_VERIFY_STRICTENC;
-    }
 
     if ((flags & SCRIPT_VERIFY_SIGPUSHONLY) != 0 && !scriptSig.IsPushOnly()) {
         return set_error(serror, SCRIPT_ERR_SIG_PUSHONLY);
