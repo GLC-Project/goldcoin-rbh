@@ -1266,7 +1266,7 @@ uint256 SignatureHash(const CScript& scriptCode, const T& txTo, unsigned int nIn
 {
     assert(nIn < txTo.vin.size());
 
-    if (sigversion == SigVersion::WITNESS_V0 && (nHashType & SIGHASH_FORKID) && (flags & SCRIPT_ENABLE_SIGHASH_FORKID)) {
+    if (sigversion == SigVersion::WITNESS_V0 || ((nHashType & SIGHASH_FORKID) && (flags & SCRIPT_ENABLE_SIGHASH_FORKID))) {
         uint256 hashPrevouts;
         uint256 hashSequence;
         uint256 hashOutputs;
