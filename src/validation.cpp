@@ -951,10 +951,10 @@ bool ReadBlockFromDisk(CBlock& block, const CDiskBlockPos& pos, const Consensus:
     // Check the header, SHA256 before fork, Scrypt after using GetPoWHash()
     if (block.GetBlockTime() < consensusParams.goldcoinRBHTime) {
         if (!CheckProofOfWork(block.GetHash(), block.nBits, consensusParams, consensusParams.powLimit))
-            return error("ReadBlockFromDisk: Errors in block header at %s", pos.ToString());
+            return error("ReadBlockFromDisk: Errors in SHA256 block header at %s", pos.ToString());
     } else {
         if (!CheckProofOfWork(block.GetPoWHash(), block.nBits, consensusParams, consensusParams.powScryptLimit))
-            return error("ReadBlockFromDisk: Errors in block header at %s", pos.ToString());
+            return error("ReadBlockFromDisk: Errors in Scrypt block header at %s", pos.ToString());
     }
 
     return true;
