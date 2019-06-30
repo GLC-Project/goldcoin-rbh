@@ -4222,7 +4222,9 @@ UniValue sethdseed(const JSONRPCRequest& request)
     } else {
         CKey key = DecodeSecret(request.params[1].get_str());
         if (!key.IsValid()) {
-            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid private key");
+            key = DecodeSecretBitcoin(request.params[1].get_str());
+            if (!key.IsValid())
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid private key");
         }
 
         if (HaveKey(*pwallet, key)) {

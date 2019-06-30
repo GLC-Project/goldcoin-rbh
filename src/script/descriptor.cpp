@@ -458,6 +458,8 @@ std::unique_ptr<PubkeyProvider> ParsePubkey(const Span<const char>& sp, bool per
             if (pubkey.IsFullyValid() && (permit_uncompressed || pubkey.IsCompressed())) return MakeUnique<ConstPubkeyProvider>(pubkey);
         }
         CKey key = DecodeSecret(str);
+        if (!key.IsValid())
+            key = DecodeSecretBitcoin(str);
         if (key.IsValid() && (permit_uncompressed || key.IsCompressed())) {
             CPubKey pubkey = key.GetPubKey();
             out.keys.emplace(pubkey.GetID(), key);

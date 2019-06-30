@@ -155,7 +155,11 @@ UniValue importprivkey(const JSONRPCRequest& request)
         }
 
         CKey key = DecodeSecret(strSecret);
-        if (!key.IsValid()) throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid private key encoding");
+        if (!key.IsValid()) {
+            key = DecodeSecretBitcoin(strSecret);
+            if (!key.IsValid())
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid private key encoding");
+        }
 
         CPubKey pubkey = key.GetPubKey();
         assert(key.VerifyPubKey(pubkey));
@@ -566,6 +570,8 @@ UniValue importwallet(const JSONRPCRequest& request)
             if (vstr.size() < 2)
                 continue;
             CKey key = DecodeSecret(vstr[0]);
+            if (!key.IsValid())
+                key = DecodeSecretBitcoin(vstr[0]);
             if (key.IsValid()) {
                 CPubKey pubkey = key.GetPubKey();
                 assert(key.VerifyPubKey(pubkey));
@@ -925,7 +931,9 @@ static UniValue ProcessImport(CWallet * const pwallet, const UniValue& data, con
                     CKey key = DecodeSecret(privkey);
 
                     if (!key.IsValid()) {
-                        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid private key encoding");
+                        key = DecodeSecretBitcoin(privkey);
+                        if (!key.IsValid())
+                            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid private key encoding");
                     }
 
                     CPubKey pubkey = key.GetPubKey();
@@ -1026,7 +1034,9 @@ static UniValue ProcessImport(CWallet * const pwallet, const UniValue& data, con
                 CKey key = DecodeSecret(strPrivkey);
 
                 if (!key.IsValid()) {
-                    throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid private key encoding");
+                    key = DecodeSecretBitcoin(strPrivkey);
+                    if (!key.IsValid())
+                        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid private key encoding");
                 }
 
                 CPubKey pubKey = key.GetPubKey();

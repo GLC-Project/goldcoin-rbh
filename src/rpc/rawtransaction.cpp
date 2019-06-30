@@ -980,7 +980,9 @@ static UniValue signrawtransactionwithkey(const JSONRPCRequest& request)
         UniValue k = keys[idx];
         CKey key = DecodeSecret(k.get_str());
         if (!key.IsValid()) {
-            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid private key");
+            key = DecodeSecretBitcoin(k.get_str());
+            if (!key.IsValid())
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid private key");
         }
         keystore.AddKey(key);
     }

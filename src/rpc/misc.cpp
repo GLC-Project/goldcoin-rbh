@@ -236,7 +236,9 @@ static UniValue signmessagewithprivkey(const JSONRPCRequest& request)
 
     CKey key = DecodeSecret(strPrivkey);
     if (!key.IsValid()) {
-        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid private key");
+        key = DecodeSecretBitcoin(strPrivkey);
+        if (!key.IsValid())
+            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid private key");
     }
 
     CHashWriter ss(SER_GETHASH, 0);
