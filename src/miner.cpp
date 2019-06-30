@@ -60,7 +60,7 @@ BlockAssembler::Options::Options() {
     nBlockMaxWeight = DEFAULT_BLOCK_MAX_WEIGHT;
 }
 
-BlockAssembler::BlockAssembler(const CChainParams& params, const Options& options) : goldcoinUTXOData(nullptr), goldcoinUTXOs(nullptr), chainparams(params)
+BlockAssembler::BlockAssembler(const CChainParams& params, const Options& options) : chainparams(params)
 {
     blockMinFeeRate = options.blockMinFeeRate;
     // Limit weight to between 4K and MAX_BLOCK_WEIGHT-4K for sanity:
@@ -166,46 +166,19 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     coinbaseTx.vout[0].scriptPubKey = scriptPubKeyIn;
     coinbaseTx.vout[0].nValue = nFees + GetBlockSubsidy(nHeight, chainparams.GetConsensus());
 
-    // Testnet only
-    if (Params().NetworkIDString() == CBaseChainParams::TESTNET)
+    // Mainnet only
+    if (Params().NetworkIDString() == CBaseChainParams::MAIN)
     {
-        if (nHeight == Params().GetConsensus().goldcoinRBH)
+        if (nHeight >= Params().GetConsensus().goldcoinRBH && nHeight < Params().GetConsensus().goldcoinRBH + Params().GetConsensus().goldcoinRBHBlocks)
         {
-            if (goldcoinUTXOData == nullptr)
-                goldcoinUTXOData = ReverseHardForkBlocks::testnetTransactions();
-
-            if (goldcoinUTXOs == nullptr)
+            int position = nHeight % Params().GetConsensus().goldcoinRBH;
+            auto goldcoinUTXOData = ReverseHardForkBlocks::transactions(position);
+            for (const auto& out: *goldcoinUTXOData)
             {
-                goldcoinUTXOs = new std::vector<CTxOut>;
-                for (const auto& out: *goldcoinUTXOData)
-                {
-                    std::vector<unsigned char> script(ParseHex(out.second));
-                    CScript scriptPubKey(script.begin(), script.end());
-                    CTxOut newOut(out.first, scriptPubKey);
-                    coinbaseTx.vout.push_back(newOut);
-                    goldcoinUTXOs->push_back(newOut);
-                }
-            }
-            else
-            {
-                for (const auto& out: *goldcoinUTXOs)
-                {
-                    coinbaseTx.vout.push_back(out);
-                }
-            }
-        }
-        else if (nHeight == Params().GetConsensus().goldcoinRBH + 1)
-        {
-            // One past the RBH fork delete the testnet UTXOs and UTXO data set
-            if (goldcoinUTXOData)
-            {
-                delete goldcoinUTXOData;
-                goldcoinUTXOData = nullptr;
-            }
-            if (goldcoinUTXOs)
-            {
-                delete goldcoinUTXOs;
-                goldcoinUTXOs = nullptr;
+                std::vector<unsigned char> script(ParseHex(out.second));
+                CScript scriptPubKey(script.begin(), script.end());
+                CTxOut newOut(out.first, scriptPubKey);
+                coinbaseTx.vout.push_back(newOut);
             }
         }
     }

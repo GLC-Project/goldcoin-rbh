@@ -8,6 +8,7 @@
 #include <arith_uint256.h>
 #include <chain.h>
 #include <chainparams.h>
+#include <chainparamblocks.h>
 #include <checkpoints.h>
 #include <checkpointsync.h>
 #include <checkqueue.h>
@@ -1661,9 +1662,8 @@ static unsigned int GetBlockScriptFlags(const CBlockIndex* pindex, const Consens
         flags |= SCRIPT_VERIFY_CHECKSEQUENCEVERIFY;
     }
 
-    // Allow 10 blocks sans replay protection to add GLC UTXO set
-    int replayOffset = 10;
-    if (pindex->nHeight >= consensusparams.goldcoinRBH + replayOffset) {
+    // Allow set number of blocks without replay protection to add GLC UTXO set
+    if (pindex->nHeight >= consensusparams.goldcoinRBH + Params().GetConsensus().goldcoinRBHBlocks) {
         flags |= SCRIPT_VERIFY_STRICTENC;
         flags |= SCRIPT_ENABLE_SIGHASH_FORKID;
     }
@@ -1913,9 +1913,10 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
         // * p2sh (when P2SH enabled in flags and excludes coinbase)
         // * witness (when witness enabled in flags and excludes coinbase)
         nSigOpsCost += GetTransactionSigOpCost(tx, view, flags);
-        if (nSigOpsCost > MAX_BLOCK_SIGOPS_COST)
-            return state.DoS(100, error("ConnectBlock(): too many sigops"),
-                             REJECT_INVALID, "bad-blk-sigops");
+        if (pindex->nHeight < chainparams.GetConsensus().goldcoinRBH && pindex->nHeight >= chainparams.GetConsensus().goldcoinRBH + Params().GetConsensus().goldcoinRBHBlocks)
+            if (nSigOpsCost > MAX_BLOCK_SIGOPS_COST)
+                return state.DoS(100, error("ConnectBlock(): too many sigops"),
+                                 REJECT_INVALID, "bad-blk-sigops");
 
         txdata.emplace_back(tx);
         if (!tx.IsCoinBase())
@@ -1939,15 +1940,38 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
 
     CAmount blockReward = nFees + GetBlockSubsidy(pindex->nHeight, chainparams.GetConsensus());
 
-    /* Do we want to validate UTXOs (subsidy, scriptpubkey) for RBH blocks?
-     * We can skip and set checkpoint and assumevalid past the RBH blocks.
-     * ACPD will prevent the changing of history as well.
-    */
-    if (pindex->nHeight != chainparams.GetConsensus().goldcoinRBH && block.vtx[0]->GetValueOut() > blockReward)
-        return state.DoS(100,
-                         error("ConnectBlock(): coinbase pays too much (actual=%d vs limit=%d)",
-                               block.vtx[0]->GetValueOut(), blockReward),
-                               REJECT_INVALID, "bad-cb-amount");
+    // Regular subsidy check before and after Goldcoin RBH
+    if (pindex->nHeight < chainparams.GetConsensus().goldcoinRBH || pindex->nHeight >= chainparams.GetConsensus().goldcoinRBH + Params().GetConsensus().goldcoinRBHBlocks) {
+        if (block.vtx[0]->GetValueOut() > blockReward)
+            return state.DoS(100,
+                             error("ConnectBlock(): coinbase pays too much (actual=%d vs limit=%d)",
+                                   block.vtx[0]->GetValueOut(), blockReward),
+                                   REJECT_INVALID, "bad-cb-amount");
+    } else { // Subsidy and RBH hard fork UTXO check
+        int position = pindex->nHeight % Params().GetConsensus(). goldcoinRBH;
+        std::shared_ptr<std::vector<std::pair<int64_t, std::string> > > goldcoinUTXOData;
+        if (Params().NetworkIDString() == CBaseChainParams::MAIN)
+            goldcoinUTXOData = ReverseHardForkBlocks::transactions(position);
+        else
+            goldcoinUTXOData = ReverseHardForkBlocks::transactions(position, true);
+        if (block.vtx[0]->vout.size() != goldcoinUTXOData->size() + 2) { // +1 coinbase / +1 OP_RETURN
+            return state.DoS(100,
+                             error("ConnectBlock(): RBH coinbase incorrect number of outputs (actual=%d vs expected=%d height=%d)",
+                                   block.vtx[0]->vout.size(), goldcoinUTXOData->size() + 1, pindex->nHeight),
+                                   REJECT_INVALID, "bad-cb-output-count");
+        }
+        for (int i = 0; i < goldcoinUTXOData->size(); i++) {
+            std::vector<unsigned char> script(ParseHex((*goldcoinUTXOData)[i].second));
+            CScript scriptPubKey(script.begin(), script.end());
+            if (block.vtx[0]->vout[i + 1] != CTxOut((*goldcoinUTXOData)[i].first, scriptPubKey)) {
+                return state.DoS(100,
+                                 error("ConnectBlock(): RBH coinbase mismatching output (actual=%s vs expected=%s)",
+                                       block.vtx[0]->vout[i + 1].ToString(), CTxOut((*goldcoinUTXOData)[i].first, scriptPubKey).ToString()),
+                                       REJECT_INVALID, "bad-cb-output-mismatching");
+            }
+        }
+    }
+
 
     if (!control.Wait())
         return state.DoS(100, error("%s: CheckQueue failed", __func__), REJECT_INVALID, "block-validation-failed");
@@ -3037,8 +3061,11 @@ bool CheckBlock(const CBlock& block, CValidationState& state, const Consensus::P
     {
         nSigOps += GetLegacySigOpCount(*tx);
     }
-    if (nSigOps * WITNESS_SCALE_FACTOR > MAX_BLOCK_SIGOPS_COST)
-        return state.DoS(100, false, REJECT_INVALID, "bad-blk-sigops", false, "out-of-bounds SigOpCount");
+    CBlockIndex* pindex = LookupBlockIndex(block.hashPrevBlock);
+    int nHeight = pindex ? pindex->nHeight + 1 : 0;
+    if (nHeight < consensusParams.goldcoinRBH && nHeight >= consensusParams.goldcoinRBH + Params().GetConsensus().goldcoinRBHBlocks)
+        if (nSigOps * WITNESS_SCALE_FACTOR > MAX_BLOCK_SIGOPS_COST)
+            return state.DoS(100, false, REJECT_INVALID, "bad-blk-sigops", false, "out-of-bounds SigOpCount");
 
     if (fCheckPOW && fCheckMerkleRoot)
         block.fChecked = true;

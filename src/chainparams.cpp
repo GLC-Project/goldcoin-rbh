@@ -82,9 +82,10 @@ public:
         consensus.BIP34Hash = uint256S("0x000000000000024b89b42a942fe0d9fea3bb44ab7bd1b19115dd6a759c0808b8");
         consensus.BIP65Height = 388381; // 000000000000000004c2b624ed5d7756c508d90fd0da2c7c679febfa6c4735f0
         consensus.BIP66Height = 363725; // 00000000000000000379eaa19dce8c9b722d46ae6a57c2f1a988119488b50931
-        consensus.goldcoinRBH = std::numeric_limits<int>::max(); // TBD
-        consensus.goldcoinRBHTime = std::numeric_limits<uint32_t>::max(); // TBD
-        consensus.goldcoinUTXOHeight = 968425; // TBD
+        consensus.goldcoinRBH = 565903; // TBD
+        consensus.goldcoinRBHTime = 1551874815; // TBD
+        consensus.goldcoinUTXOHeight = 980841; // TBD
+        consensus.goldcoinRBHBlocks = 10; // TBD
         consensus.powLimit = uint256S("00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.powScryptLimit = uint256S("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nPowTargetTimespan = 14 * 24 * 60 * 60; // two weeks
@@ -207,6 +208,7 @@ public:
         consensus.goldcoinRBH = 1457001;
         consensus.goldcoinRBHTime = 1550170301; // GMT: 14 February 2019 18:51:41
         consensus.goldcoinUTXOHeight = 301;
+        consensus.goldcoinRBHBlocks = 1;
         consensus.powLimit = uint256S("00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.powScryptLimit = uint256S("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nPowTargetTimespan = 14 * 24 * 60 * 60; // two weeks

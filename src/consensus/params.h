@@ -70,6 +70,8 @@ struct Params {
     int goldcoinRBH;
     /** Hard fork time */
     int64_t goldcoinRBHTime;
+    /** Number of RBH blocks */
+    int64_t goldcoinRBHBlocks;
     /** Goldcoin height when UTXO set was taken */
     int goldcoinUTXOHeight;
     /** Proof of work parameters */

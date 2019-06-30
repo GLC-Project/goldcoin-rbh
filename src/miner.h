@@ -129,12 +129,6 @@ private:
     // A convenience pointer that always refers to the CBlock in pblocktemplate
     CBlock* pblock;
 
-    // Pointer to hold vector of Goldcoin UTXOs data
-    const std::vector<std::pair<int64_t, std::string> >* goldcoinUTXOData;
-
-    // Pointer to hold the Goldcoin UTXOs
-    std::vector<CTxOut>* goldcoinUTXOs;
-
     // Configuration parameters for the block size
     bool fIncludeWitness;
     unsigned int nBlockMaxWeight;
