@@ -460,6 +460,7 @@ goldcoind_SOURCES += bitcoind-res.rc
 endif
 
 goldcoind_LDADD = \
+  $(LIBBITCOIN_COMMON) \
   $(LIBBITCOIN_SERVER) \
   $(LIBBITCOIN_WALLET) \
   $(LIBBITCOIN_COMMON) \
