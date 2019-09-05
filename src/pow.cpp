@@ -15,6 +15,11 @@ unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHead
 {
     assert(pindexLast != nullptr);
 
+    if (pindexLast->GetMedianTimePast() >= params.dgwMedianTime)
+    {
+        return DarkGravityWave(pindexLast, pblock, params);
+    }
+
     if (pindexLast->nHeight + 1 >= params.goldcoinRBH)
     {
         // Reset diff for 240 blocks, the max sample size of Golden River
@@ -250,6 +255,71 @@ unsigned int GoldenRiver(const CBlockIndex* pindexLast, const Consensus::Params&
     //Sets a ceiling on highest target value (lowest possible difficulty)
     if (bnNew > bnProofOfWorkLimit)
         bnNew = bnProofOfWorkLimit;
+
+    return bnNew.GetCompact();
+}
+
+unsigned int DarkGravityWave(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params& params) {
+    /* current difficulty formula, dash - DarkGravity v3, written by Evan Duffield - evan@dash.org */
+    const arith_uint256 bnPowLimit = UintToArith256(params.powLimit);
+    int64_t nPastBlocks = 30;
+
+    // make sure we have at least (nPastBlocks + 1) blocks, otherwise just return powLimit
+    if (!pindexLast || pindexLast->nHeight < nPastBlocks) {
+        return bnPowLimit.GetCompact();
+    }
+
+    if (params.fPowAllowMinDifficultyBlocks) {
+        // recent block is more than 6 hours old
+        if (pblock->GetBlockTime() > pindexLast->GetBlockTime() + 2 * 60 * 60) {
+            return bnPowLimit.GetCompact();
+        }
+        // recent block is more than 120 minutes old
+        if (pblock->GetBlockTime() > pindexLast->GetBlockTime() + params.nPowTargetSpacing * 60) {
+            arith_uint256 bnNew = arith_uint256().SetCompact(pindexLast->nBits) * 10;
+            if (bnNew > bnPowLimit) {
+                bnNew = bnPowLimit;
+            }
+            return bnNew.GetCompact();
+        }
+    }
+
+    const CBlockIndex *pindex = pindexLast;
+    arith_uint256 bnPastTargetAvg;
+
+    for (unsigned int nCountBlocks = 1; nCountBlocks <= nPastBlocks; nCountBlocks++) {
+        arith_uint256 bnTarget = arith_uint256().SetCompact(pindex->nBits);
+        if (nCountBlocks == 1) {
+            bnPastTargetAvg = bnTarget;
+        } else {
+            // NOTE: that's not an average really...
+            bnPastTargetAvg = (bnPastTargetAvg * nCountBlocks + bnTarget) / (nCountBlocks + 1);
+        }
+
+        if(nCountBlocks != nPastBlocks) {
+            assert(pindex->pprev); // should never fail
+            pindex = pindex->pprev;
+        }
+    }
+
+    arith_uint256 bnNew(bnPastTargetAvg);
+
+    int64_t nActualTimespan = pindexLast->GetBlockTime() - pindex->GetBlockTime();
+    // NOTE: is this accurate? nActualTimespan counts it for (nPastBlocks - 1) blocks only...
+    int64_t nTargetTimespan = nPastBlocks * params.nPowTargetSpacing;
+
+    if (nActualTimespan < nTargetTimespan/3)
+        nActualTimespan = nTargetTimespan/3;
+    if (nActualTimespan > nTargetTimespan*3)
+        nActualTimespan = nTargetTimespan*3;
+
+    // Retarget
+    bnNew *= nActualTimespan;
+    bnNew /= nTargetTimespan;
+
+    if (bnNew > bnPowLimit) {
+        bnNew = bnPowLimit;
+    }
 
     return bnNew.GetCompact();
 }

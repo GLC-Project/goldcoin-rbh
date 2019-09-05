@@ -86,6 +86,7 @@ public:
         consensus.goldcoinRBHTime = 1551874815; // TBD
         consensus.goldcoinUTXOHeight = 980841; // TBD
         consensus.goldcoinRBHBlocks = 10; // TBD
+        consensus.dgwMedianTime = 1567900800; // TBD
         consensus.powLimit = uint256S("00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.powScryptLimit = uint256S("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nPowTargetTimespan = 14 * 24 * 60 * 60; // two weeks
@@ -209,6 +210,7 @@ public:
         consensus.goldcoinRBHTime = 1550170301; // GMT: 14 February 2019 18:51:41
         consensus.goldcoinUTXOHeight = 301;
         consensus.goldcoinRBHBlocks = 1;
+        consensus.dgwMedianTime = 1567900800; // Sunday, September 8, 2019 12:00:00 AM
         consensus.powLimit = uint256S("00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.powScryptLimit = uint256S("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nPowTargetTimespan = 14 * 24 * 60 * 60; // two weeks
