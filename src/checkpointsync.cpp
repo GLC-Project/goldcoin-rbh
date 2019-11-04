@@ -1,5 +1,5 @@
 // Copyright (c) 2012-2013 PPCoin developers
-// Copyright (c) 2014-2017 ArtByte Developers
+// Copyright (c) 2013-2019 Feathercoin developers
 // Distributed under conditional MIT/X11 software license,
 // see the accompanying file COPYING
 //
@@ -46,33 +46,26 @@
 // mode is also the default mode (default value -1 for checkpointdepth).
 //
 
-#include <chainparams.h>
-#include <checkpoints.h>
 #include <checkpointsync.h>
 
-#include <key.h>
+#include <arith_uint256.h>
+#include <chainparams.h>
 #include <key_io.h>
+#include <logging.h>
+#include <netmessagemaker.h>
 #include <txdb.h>
-#include <uint256.h>
-#include <txmempool.h>
-#include <consensus/validation.h>
-#include <consensus/consensus.h>
 #include <validation.h>
 #include <rpc/mining.h>
 
 #include <univalue.h>
 
-using namespace std;
-
 // Synchronized checkpoint (centrally broadcasted)
-string CSyncCheckpoint::strMasterPrivKey = "";
+std::string CSyncCheckpoint::strMasterPrivKey = "";
 uint256 hashSyncCheckpoint = ArithToUint256(arith_uint256(0));
-uint256 hashPendingCheckpoint = ArithToUint256(arith_uint256(0));
+static uint256 hashPendingCheckpoint = ArithToUint256(arith_uint256(0));
 CSyncCheckpoint checkpointMessage;
-CSyncCheckpoint checkpointMessagePending;
-uint256 hashInvalidCheckpoint = ArithToUint256(arith_uint256(0));
-CCriticalSection cs_hashSyncCheckpoint;
-string strCheckpointWarning;
+static CSyncCheckpoint checkpointMessagePending;
+
 
 // Only descendant of current sync-checkpoint is allowed
 bool ValidateSyncCheckpoint(uint256 hashCheckpoint)
@@ -90,9 +83,12 @@ bool ValidateSyncCheckpoint(uint256 hashCheckpoint)
         // Received an older checkpoint, trace back from current checkpoint
         // to the same height of the received checkpoint to verify
         // that current checkpoint should be a descendant block
-        if (!chainActive.Contains(pindexCheckpointRecv))
+        CBlockIndex* pindex = pindexSyncCheckpoint;
+        while (pindex->nHeight > pindexCheckpointRecv->nHeight)
+            if (!(pindex = pindex->pprev))
+                return error("%s: pprev1 null - block index structure failure", __func__);
+        if (pindex->GetBlockHash() != hashCheckpoint)
         {
-            hashInvalidCheckpoint = hashCheckpoint;
             return error("%s: new sync-checkpoint %s is conflicting with current sync-checkpoint %s", __func__, hashCheckpoint.ToString(), hashSyncCheckpoint.ToString());
         }
         return false; // ignore older checkpoint
@@ -108,7 +104,6 @@ bool ValidateSyncCheckpoint(uint256 hashCheckpoint)
 
     if (pindex->GetBlockHash() != hashSyncCheckpoint)
     {
-        hashInvalidCheckpoint = hashCheckpoint;
         return error("%s: new sync-checkpoint %s is not a descendant of current sync-checkpoint %s", __func__, hashCheckpoint.ToString(), hashSyncCheckpoint.ToString());
     }
     return true;
@@ -126,7 +121,7 @@ bool WriteSyncCheckpoint(const uint256& hashCheckpoint)
 
 bool AcceptPendingSyncCheckpoint()
 {
-    LOCK(cs_hashSyncCheckpoint);
+    LOCK(cs_main);
     bool havePendingCheckpoint = hashPendingCheckpoint != ArithToUint256(arith_uint256(0)) && mapBlockIndex.count(hashPendingCheckpoint);
     if (!havePendingCheckpoint)
         return false;
@@ -165,7 +160,7 @@ uint256 AutoSelectSyncCheckpoint()
 {
     // Search backward for a block with specified depth policy
     const CBlockIndex *pindex = chainActive.Tip();
-    while (pindex->pprev && pindex->nHeight + (int)gArgs.GetArg("-checkpointdepth", DEFAULT_AUTOCHECKPOINT) > chainActive.Tip()->nHeight)
+    while (pindex->pprev && pindex->nHeight + static_cast<int>(gArgs.GetArg("-checkpointdepth", DEFAULT_AUTOCHECKPOINT)) > chainActive.Tip()->nHeight)
         pindex = pindex->pprev;
     return pindex->GetBlockHash();
 }
@@ -173,37 +168,40 @@ uint256 AutoSelectSyncCheckpoint()
 // Check against synchronized checkpoint
 bool CheckSyncCheckpoint(const CBlockIndex* pindexNew)
 {
+    LOCK(cs_main);
+
     UniValue hashrate = GetNetworkHashPS(120, pindexNew->pprev->nHeight);
     int64_t now = GetAdjustedTime();
     double toggleHashrate = 1e12 * pow(2, 2.0f*(now - 1536541807)/(365*24*60*60));
     if (hashrate.get_real() > toggleHashrate)
         return true;
 
-    LOCK(cs_hashSyncCheckpoint);
     assert(pindexNew != NULL);
     if (pindexNew->nHeight == 0)
         return true;
     const uint256& hashBlock = pindexNew->GetBlockHash();
     int nHeight = pindexNew->nHeight;
 
-    // Checkpoint should always be accepted block
+    // Reset checkpoint to Genesis block if not found or initialised
+    if (hashSyncCheckpoint == ArithToUint256(arith_uint256(0))) {
+        LogPrintf("%s: hashSyncCheckpoint not initialised, setting to genesis block: %s\n",__func__, Params().GetConsensus().hashGenesisBlock.ToString());
+        WriteSyncCheckpoint(Params().GetConsensus().hashGenesisBlock);
+        return true;
+    }
+
+    // sync-checkpoint should always be accepted block
     assert(mapBlockIndex.count(hashSyncCheckpoint));
     const CBlockIndex* pindexSync = mapBlockIndex[hashSyncCheckpoint];
-    assert(chainActive.Contains(pindexSync));
 
     if (nHeight > pindexSync->nHeight)
     {
         // Trace back to same height as sync-checkpoint
-        const CBlockIndex* pindex = pindexNew;
-        while (pindex->nHeight > pindexSync->nHeight && !chainActive.Contains(pindex))
+        const CBlockIndex* pindex = chainActive.Tip();
+        while (pindex->nHeight > pindexSync->nHeight)
             if (!(pindex = pindex->pprev))
                 return error("%s: pprev null - block index structure failure", __func__);
-
-        // At this point we could have:
-        // 1. Found block in our blockchain
-        // 2. Reached pindexSync->nHeight without finding it
-        if (!chainActive.Contains(pindex))
-            return error("%s: Only descendants of checkpoint accepted", __func__);
+        if (pindex->nHeight < pindexSync->nHeight || pindex->GetBlockHash() != hashSyncCheckpoint)
+            return false; // only descendant of sync-checkpoint can pass check
     }
     if (nHeight == pindexSync->nHeight && hashBlock != hashSyncCheckpoint)
         return error("%s: Same height with sync-checkpoint", __func__);
@@ -215,19 +213,26 @@ bool CheckSyncCheckpoint(const CBlockIndex* pindexNew)
 // Reset synchronized checkpoint to the assume valid block
 bool ResetSyncCheckpoint()
 {
-    LOCK(cs_hashSyncCheckpoint);
+    LOCK(cs_main);
 
-    if (!WriteSyncCheckpoint(Params().GetConsensus().defaultAssumeValid))
+    if (!WriteSyncCheckpoint(Params().GetConsensus().hashGenesisBlock))
         return error("%s: failed to write sync checkpoint %s", __func__, Params().GetConsensus().defaultAssumeValid.ToString());
 
     return true;
 }
 
+void AskForPendingSyncCheckpoint(CNode* pfrom)
+{
+    LOCK(cs_main);
+    if (pfrom && hashPendingCheckpoint != ArithToUint256(arith_uint256(0)) && !mapBlockIndex.count(hashPendingCheckpoint))
+        pfrom->AskFor(CInv(MSG_BLOCK, hashPendingCheckpoint));
+}
+
 // Verify sync checkpoint master pubkey and reset sync checkpoint if changed
 bool CheckCheckpointPubKey()
 {
-    string strPubKey = "";
-    string strMasterPubKey = Params().GetConsensus().checkpointPubKey;
+    std::string strPubKey = "";
+    std::string strMasterPubKey = Params().GetConsensus().checkpointPubKey;
 
     if (!pblocktree->ReadCheckpointPubKey(strPubKey) || strPubKey != strMasterPubKey)
     {
@@ -242,7 +247,7 @@ bool CheckCheckpointPubKey()
     return true;
 }
 
-bool SetCheckpointPrivKey(string strPrivKey)
+bool SetCheckpointPrivKey(std::string strPrivKey)
 {
     CKey key = DecodeSecret(strPrivKey);
     if (!key.IsValid())
@@ -269,8 +274,8 @@ bool SendSyncCheckpoint(uint256 hashCheckpoint)
     CSyncCheckpoint checkpoint;
     checkpoint.hashCheckpoint = hashCheckpoint;
     CDataStream sMsg(SER_NETWORK, PROTOCOL_VERSION);
-    sMsg << (CUnsignedSyncCheckpoint)checkpoint;
-    checkpoint.vchMsg = vector<unsigned char>(sMsg.begin(), sMsg.end());
+    sMsg << static_cast<CUnsignedSyncCheckpoint>(checkpoint);
+    checkpoint.vchMsg = std::vector<unsigned char>(sMsg.begin(), sMsg.end());
 
     if (CSyncCheckpoint::strMasterPrivKey.empty())
         return error("%s: Checkpoint master key unavailable.", __func__);
@@ -293,47 +298,99 @@ bool SendSyncCheckpoint(uint256 hashCheckpoint)
     return true;
 }
 
+
+void CUnsignedSyncCheckpoint::SetNull()
+{
+    nVersion = 1;
+    hashCheckpoint = ArithToUint256(arith_uint256(0));
+}
+
+std::string CUnsignedSyncCheckpoint::ToString() const
+{
+    return strprintf(
+            "CSyncCheckpoint(\n"
+            "    nVersion       = %d\n"
+            "    hashCheckpoint = %s\n"
+            ")\n",
+        nVersion,
+        hashCheckpoint.ToString());
+}
+
+void CUnsignedSyncCheckpoint::print() const
+{
+    printf("%s", ToString().c_str());
+}
+
+CSyncCheckpoint::CSyncCheckpoint()
+{
+    SetNull();
+}
+
+void CSyncCheckpoint::SetNull()
+{
+    CUnsignedSyncCheckpoint::SetNull();
+    vchMsg.clear();
+    vchSig.clear();
+}
+
+bool CSyncCheckpoint::IsNull() const
+{
+    return (hashCheckpoint == uint256());
+}
+
+uint256 CSyncCheckpoint::GetHash() const
+{
+    return Hash(this->vchMsg.begin(), this->vchMsg.end());
+}
+
+bool CSyncCheckpoint::RelayTo(CNode* pfrom) const
+{
+    // returns true if wasn't already sent
+    if (g_connman && pfrom->hashCheckpointKnown != hashCheckpoint && pfrom->supportACPMessages)
+    {
+        pfrom->hashCheckpointKnown = hashCheckpoint;
+        g_connman->PushMessage(pfrom, CNetMsgMaker(pfrom->GetSendVersion()).Make(NetMsgType::CHECKPOINT, *this));
+        return true;
+    }
+    return false;
+}
+
 // Verify signature of sync-checkpoint message
 bool CSyncCheckpoint::CheckSignature()
 {
-    string strMasterPubKey = Params().GetConsensus().checkpointPubKey;
+    std::string strMasterPubKey = Params().GetConsensus().checkpointPubKey;
     CPubKey key(ParseHex(strMasterPubKey));
     if (!key.Verify(Hash(vchMsg.begin(), vchMsg.end()), vchSig))
         return error("%s: verify signature failed", __func__);
 
     // Now unserialize the data
     CDataStream sMsg(vchMsg, SER_NETWORK, PROTOCOL_VERSION);
-    sMsg >> *(CUnsignedSyncCheckpoint*)this;
+    sMsg >> *static_cast<CUnsignedSyncCheckpoint*>(this);
     return true;
 }
 
 // Process synchronized checkpoint
-bool CSyncCheckpoint::ProcessSyncCheckpoint()
+bool CSyncCheckpoint::ProcessSyncCheckpoint(CNode* pfrom)
 {
     if (!CheckSignature())
         return false;
 
-    LOCK(cs_hashSyncCheckpoint);
+    LOCK(cs_main);
     if (!mapBlockIndex.count(hashCheckpoint))
-    {
-        LogPrintf("%s: Missing headers for received sync-checkpoint %s\n", __func__, hashCheckpoint.ToString());
-        return false;
-    }
-
-    if (!ValidateSyncCheckpoint(hashCheckpoint))
-        return false;
-
-    bool pass = chainActive.Contains(mapBlockIndex[hashCheckpoint]);
-
-    if (!pass)
     {
         // We haven't received the checkpoint chain, keep the checkpoint as pending
         hashPendingCheckpoint = hashCheckpoint;
         checkpointMessagePending = *this;
         LogPrintf("%s: pending for sync-checkpoint %s\n", __func__, hashCheckpoint.ToString());
 
+        if (pfrom)
+            pfrom->AskFor(CInv(MSG_BLOCK, hashCheckpoint));
+
         return false;
     }
+
+    if (!ValidateSyncCheckpoint(hashCheckpoint))
+        return false;
 
     if (!WriteSyncCheckpoint(hashCheckpoint))
         return error("%s: failed to write sync checkpoint %s\n", __func__, hashCheckpoint.ToString());
